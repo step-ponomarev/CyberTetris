@@ -1,4 +1,4 @@
-.model small
+.model small, stdcall
 .stack 256h
 .data
     squareFigure  db 1, 1, 0, 0
@@ -141,18 +141,30 @@ jmp @@startDrawFigure
 @@startDrawFigure:
     mov ax, VIDEO_RAM
     mov es, ax ; 
-    mov di, 0
 
     mov si, [curFigure]
-    mov cx, 4 ;figure rows
+
+    ;prepare position
+    xor ax, ax
+    mov al, [yCoord]
+    mov dl, MAX_COLUMN_COUNT
+    mul dl
+
+    xor dx, dx
+    mov dl, [xCoord]
+    add ax, dx
+    inc ax
+
+    ;each pipxel is 2 bytes [attr, symbol]
+    shl ax, 1 
+    
+    mov di, ax
+
+    mov bx, 0 ;figure rows [1, 4]
     @@row:
-        add di, 2 ; + left board: 1 byte color 1 byte symbol 
-        mov bx, 1;
+        mov cx, 4
         @@col:
-            ;if figure print
-            cmp bx, 4
-            ja @@printPlayngField
-            
+            xor ax, ax
             lodsb ; ds[si] -> al
             cmp al, 0
             je @@printPlayngField
@@ -160,15 +172,17 @@ jmp @@startDrawFigure
             call pickColor
             @@print:
                 stosw ; ax -> es[di]
+        loop @@col
 
-            inc bx
-            cmp bx, PLAYING_FIELD_SIZE - 1
-            jne @@col
-        
-        add di, 2
-        mov bx, MAX_COLUMN_COUNT - PLAYING_FIELD_SIZE
-        call fillEmptyRow
-    loop @@row
+        xor ax, ax
+        mov ax, di
+        sub ax, 8
+        add ax, MAX_COLUMN_COUNT * 2
+
+        mov di, ax
+    inc bx
+    cmp bx, 4
+    jl @@row
 ret
 drawFigure endp
 
@@ -178,12 +192,46 @@ exit proc
     ret
 exit endp
 
+Sleep proc
+    mov cx, 0FFFFh
+    @@sleep:
+        mov dx, 0FFFFh
+        mov ah, 86h
+        int 15h
+        int 15h
+        int 15h
+        int 15h
+        int 15h
+
+    loop @@sleep
+
+    ret
+Sleep endp
+
 main: 
     mov ax, @data
     mov ds, ax
 
     call drawField
-    call drawFigure
+        call drawFigure
 
-    call exit
+
+    @@cycle:
+        call drawField
+        call drawFigure
+
+        call Sleep
+
+        mov al, [yCoord]
+        cmp al, 16
+        je @@exit
+
+        inc al
+        mov bx, offset yCoord
+        mov [bx], al
+    jmp @@cycle
+
+
+    @@exit: 
+        call exit
 end main
