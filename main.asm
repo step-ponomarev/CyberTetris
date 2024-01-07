@@ -1,4 +1,5 @@
-.model small, stdcall
+.model small,stdcall
+
 .stack 256h
 .data
     squareFigure  db 1, 1, 0, 0
@@ -11,8 +12,8 @@
                   db 2, 0, 0, 0
                   db 2, 0, 0, 0
 
-    tFigure       db 0, 3, 0, 0
-                  db 3, 3, 3, 0
+    longRotated   db 2, 2, 2, 2
+                  db 0, 0, 0, 0
                   db 0, 0, 0, 0
                   db 0, 0, 0, 0
 
@@ -21,7 +22,42 @@
                   db 4, 0, 0, 0
                   db 4, 4, 4, 0
 
-    curFigure dw offset longFigure
+    lFigureRotation1    db 4, 4, 4, 4
+                        db 0, 0, 0, 4
+                        db 0, 0, 0, 4
+                        db 0, 0, 0, 4
+
+    lFigureRotation2    db 0, 0, 0, 4
+                        db 0, 0, 0, 4
+                        db 0, 0, 0, 4
+                        db 4, 4, 4, 4
+
+    tFigure       db 0, 3, 0, 0
+                  db 3, 3, 3, 0
+                  db 0, 0, 0, 0
+                  db 0, 0, 0, 0
+
+    tFigureRotation1    db 3, 0, 0, 0
+                        db 3, 3, 0, 0
+                        db 3, 0, 0, 0
+                        db 0, 0, 0, 0
+
+    tFigureRotation2    db 3, 3, 3, 0
+                        db 0, 3, 0, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+
+    tFigureRotation3    db 0, 3, 0, 0
+                        db 3, 3, 0, 0
+                        db 0, 3, 0, 0
+                        db 0, 0, 0, 0
+
+    ; each figure has this attrs
+    curFigureMaxX db 0
+    curFigureMaxY db 0
+    curFigure dw offset tFigureRotation2
+    curFigureRotationAmount db 0
+    curFigureRotationId db 0
 
     xCoord db 0
     yCoord db 0
@@ -42,6 +78,10 @@ ROW_COUNT = 21
 PLAYING_FIELD_SIZE = 12
 
 VIDEO_RAM = 0b800h
+
+;keys
+RIGHT_KEY = 4dh
+LEFT_KEY = 4bh
 
 pickColor proc
     cmp al, 1
@@ -130,17 +170,20 @@ jmp @@startDrawField
 ret
 drawField endp
 
-
 drawFigure proc
 jmp @@startDrawFigure
 
-@@printPlayngField:
-    mov ax, FIELD_SYMBOL
-    jmp @@print
+@@updateMaxX:
+    mov [curFigureMaxX], cl
+    jmp @@maxXUpdated
+
+@@updateMaxY:
+    mov [curFigureMaxY], bl
+    jmp @@maxYUpdated
 
 @@startDrawFigure:
     mov ax, VIDEO_RAM
-    mov es, ax ; 
+    mov es, ax
 
     mov si, [curFigure]
 
@@ -160,18 +203,33 @@ jmp @@startDrawFigure
     
     mov di, ax
 
-    mov bx, 0 ;figure rows [1, 4]
+    mov bx, 4 ;figure rows [1, 4]
     @@row:
-        mov cx, 4
+        xor cx, cx
+        mov cl, 04h
         @@col:
             xor ax, ax
             lodsb ; ds[si] -> al
             cmp al, 0
-            je @@printPlayngField
+            je @@skip
 
+            mov bh, [curFigureMaxX]
+            cmp bh, cl
+            jl @@updateMaxX
+
+            @@maxXUpdated:
+            mov bh, [curFigureMaxY]
+            cmp bh, bl
+            jl @@updateMaxY
+
+            @@maxYUpdated:
             call pickColor
             @@print:
                 stosw ; ax -> es[di]
+                jmp @@loop
+            @@skip:
+                add di, 2
+            @@loop:
         loop @@col
 
         xor ax, ax
@@ -180,9 +238,9 @@ jmp @@startDrawFigure
         add ax, MAX_COLUMN_COUNT * 2
 
         mov di, ax
-    inc bx
-    cmp bx, 4
-    jl @@row
+    dec bl
+    cmp bl, 0
+    ja @@row
 ret
 drawFigure endp
 
@@ -192,45 +250,88 @@ exit proc
     ret
 exit endp
 
-Sleep proc
-    mov cx, 0FFFFh
-    @@sleep:
-        mov dx, 0FFFFh
-        mov ah, 86h
-        int 15h
-        int 15h
-        int 15h
-        int 15h
-        int 15h
-
-    loop @@sleep
-
+sleep proc
+    push cx
+    mov cx, 0Fh
+    mov dx, 4240h
+    mov ah, 86h
+    int 15h
     ret
-Sleep endp
+sleep endp
+
+handleKey proc
+jmp @@startHandleKey
+
+@@handleRight:
+    mov al, [xCoord]
+    mov ah, PLAYING_FIELD_SIZE + 1
+    sub ah, [curFigureMaxX]
+
+    cmp al, ah
+    jae @@clearBuffer
+
+    inc al
+    mov [xCoord], al
+    jmp @@clearBuffer
+
+@@handleLeft:
+    mov al, [xCoord]
+    cmp al, 0
+    je @@clearBuffer
+
+    dec al
+    mov [xCoord], al
+    jmp @@clearBuffer
+
+@@clearBuffer:
+    mov ah, 0h ; read from buffer
+    int 16h
+
+    mov ah, 1h ; mov ah -> scan code, al -> asci
+    int 16h
+    jnz @@clearBuffer ; check zero flag
+
+    jmp @@ret
+
+@@startHandleKey:
+    mov ah, 1h ; mov ah -> scan code, al -> asci
+    int 16h
+    jz @@ret ; check zero flag
+
+    cmp ah, RIGHT_KEY
+    je @@handleRight
+
+    cmp ah, LEFT_KEY
+    je @@handleLeft
+
+    @@ret:
+        ret
+handleKey endp
 
 main: 
     mov ax, @data
     mov ds, ax
 
-    call drawField
-        call drawFigure
-
-
+    mov cx, ROW_COUNT - 1
+    ;;init field array
+    ;;on finish cycle we will save figure position in memory
+    ;; afterwards we will redraw all figures on draw field
+    ;;need rewrite logic: init playing field and save on each figure move instead redrawing
     @@cycle:
+        push cx
         call drawField
         call drawFigure
 
-        call Sleep
+        call sleep
+        call handleKey
+
+        pop cx
 
         mov al, [yCoord]
-        cmp al, 16
-        je @@exit
-
         inc al
-        mov bx, offset yCoord
-        mov [bx], al
-    jmp @@cycle
 
+        mov [yCoord], al
+    loop @@cycle
 
     @@exit: 
         call exit
