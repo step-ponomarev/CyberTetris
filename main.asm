@@ -1,41 +1,63 @@
-.model small,stdcall
-
+.model small
 .stack 256h
 .data
-    squareFigure  db 1, 1, 0, 0
-                  db 1, 1, 0, 0
-                  db 0, 0, 0, 0
-                  db 0, 0, 0, 0
+    ;colored symbols
+    FIELD_SYMBOL = 10DBh
+    BLACK_SYMBOL = 00DBh
+    WHITE_SYMBOL = 0FFDBh
 
-    longFigure    db 2, 0, 0, 0
-                  db 2, 0, 0, 0
-                  db 2, 0, 0, 0
-                  db 2, 0, 0, 0
+    ORANGE_SYMBOL = 44DBh
+    PURPLE_SYMBOL = 55DBh
+    BLUE_SYMBOL = 33DBh
+    GREEN_SYMBOL = 22DBh
 
-    longRotated   db 2, 2, 2, 2
-                  db 0, 0, 0, 0
-                  db 0, 0, 0, 0
-                  db 0, 0, 0, 0
+    ;playing filed sizes
+    TERMINAL_COLUMN_BYTES = 160
+    PLAYING_FIELD_ROW_COUNT_BYTES = 21
+    PLAYING_FIELD_COLUMN_COUNT_BYTES = 44
 
-    lFigure       db 4, 0, 0, 0
-                  db 4, 0, 0, 0
-                  db 4, 0, 0, 0
-                  db 4, 4, 4, 0
+    PLAYING_FIELD_SIZE_BYTES =  PLAYING_FIELD_ROW_COUNT_BYTES * PLAYING_FIELD_COLUMN_COUNT_BYTES
 
-    lFigureRotation1    db 4, 4, 4, 4
-                        db 0, 0, 0, 4
-                        db 0, 0, 0, 4
-                        db 0, 0, 0, 4
+    VIDEO_RAM = 0B800h
 
-    lFigureRotation2    db 0, 0, 0, 4
-                        db 0, 0, 0, 4
-                        db 0, 0, 0, 4
-                        db 4, 4, 4, 4
+    ;keys
+    RIGHT_KEY = 4dh
+    LEFT_KEY = 4bh
 
-    tFigure       db 0, 3, 0, 0
-                  db 3, 3, 3, 0
-                  db 0, 0, 0, 0
-                  db 0, 0, 0, 0
+    squareFigure        db 1, 1, 0, 0
+                        db 1, 1, 0, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+
+    longFigure          db 2, 0, 0, 0
+                        db 2, 0, 0, 0
+                        db 2, 0, 0, 0
+                        db 0, 0, 0, 0
+
+    longRotated         db 2, 2, 2, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+
+    lFigure             db 4, 0, 0, 0
+                        db 4, 0, 0, 0
+                        db 4, 4, 0, 0
+                        db 0, 0, 0, 0
+
+    lFigureRotation1    db 4, 4, 4, 0
+                        db 0, 0, 4, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+
+    lFigureRotation2    db 0, 0, 4, 0
+                        db 4, 4, 4, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+
+    tFigure             db 0, 3, 0, 0
+                        db 3, 3, 3, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
 
     tFigureRotation1    db 3, 0, 0, 0
                         db 3, 3, 0, 0
@@ -52,38 +74,20 @@
                         db 0, 3, 0, 0
                         db 0, 0, 0, 0
 
+    playingField db PLAYING_FIELD_SIZE_BYTES dup(0)
     ; each figure has this attrs
-    curFigureMaxX db 0
-    curFigureMaxY db 0
-    curFigure dw offset tFigureRotation2
+    curFigureOffset dw offset lFigureRotation2
+
+    curFigureWudth db 0
+    curFigureHeight db 0
     curFigureRotationAmount db 0
     curFigureRotationId db 0
 
     xCoord db 0
     yCoord db 0
 .code
-;colored symbols
-FIELD_SYMBOL = 10DBh
-BLACK_SYMBOL = 00DBh
-WHITE_SYMBOL = 0FFDBh
 
-ORANGE_SYMBOL = 44DBh
-PURPLE_SYMBOL = 55DBh
-BLUE_SYMBOL = 33DBh
-GREEN_SYMBOL = 22DBh
-
-;playing filed sizes
-MAX_COLUMN_COUNT = 80
-ROW_COUNT = 21
-PLAYING_FIELD_SIZE = 12
-
-VIDEO_RAM = 0b800h
-
-;keys
-RIGHT_KEY = 4dh
-LEFT_KEY = 4bh
-
-pickColor proc
+pickColor proc ;is macross better?
     cmp al, 1
     je @@pickSquareColor
 
@@ -99,7 +103,6 @@ pickColor proc
     @@pickSquareColor:
         mov ax, ORANGE_SYMBOL
         jmp @@ret
-
     @@pickLongColor:
         mov ax, PURPLE_SYMBOL
         jmp @@ret
@@ -127,128 +130,150 @@ fillEmptyRow proc
 ret
 fillEmptyRow endp
 
-drawField proc 
-jmp @@startDrawField
-
-@@printFrame:
-    mov ax, WHITE_SYMBOL ; 20 space 10 color
-    jmp @@print
-
-@@startDrawField: 
+initPlayingField proc 
     ;init data segments
-    mov ax, VIDEO_RAM ;vdieo ram
-    mov es, ax ; es -> 0b800h
-    mov di, 0   ;es[di]
+    mov ax, ds
+    mov es, ax
+    mov di, offset playingField
     
-    mov cx, ROW_COUNT  ;rows
+    mov bl, 0
     @@row:
-        mov bx, PLAYING_FIELD_SIZE ;columns
-        @@col:
-            ;bottom frame
-            cmp cx, 1
-            je @@printFrame
+        mov ax, WHITE_SYMBOL ; write border
+        stosw
 
-            ;left frame
-            cmp bx, PLAYING_FIELD_SIZE
-            je @@printFrame
+        mov ax, FIELD_SYMBOL
+        mov cx, (PLAYING_FIELD_COLUMN_COUNT_BYTES - 4) / 2
+        rep stosw
 
-            ;right frame
-            cmp bx, 1
-            je @@printFrame
-        
-            mov ax, FIELD_SYMBOL ; 20 space 10 color
-            @@print:
-                stosw ; ax -> es[di]
-        
-            dec bx
-            jnz @@col
+        mov ax, WHITE_SYMBOL ; write border
+        stosw
 
-        mov bx, MAX_COLUMN_COUNT - PLAYING_FIELD_SIZE
-        call fillEmptyRow
-    loop @@row
-    
+        inc bl
+        cmp bl, PLAYING_FIELD_ROW_COUNT_BYTES - 1
+        jl @@row
+
+    mov ax, WHITE_SYMBOL ; write border
+    mov cx, PLAYING_FIELD_COLUMN_COUNT_BYTES / 2
+    rep stosw
 ret
-drawField endp
+initPlayingField endp
 
-drawFigure proc
-jmp @@startDrawFigure
+drawPlayingField proc
+    mov bx, VIDEO_RAM
+    mov es, bx
+    mov di, TERMINAL_COLUMN_BYTES
 
-@@updateMaxX:
-    mov [curFigureMaxX], cl
-    jmp @@maxXUpdated
+    mov si, offset playingField ;start figure position on playing field
+    mov bl, 0
+    @@row:
+    mov cx, PLAYING_FIELD_COLUMN_COUNT_BYTES / 2
 
-@@updateMaxY:
-    mov [curFigureMaxY], bl
-    jmp @@maxYUpdated
+    @@col:
+    lodsw
+    stosw
+    loop @@col
 
-@@startDrawFigure:
-    mov ax, VIDEO_RAM
+    sub di, PLAYING_FIELD_COLUMN_COUNT_BYTES
+    add di, TERMINAL_COLUMN_BYTES
+
+    inc bl
+    cmp bl, PLAYING_FIELD_ROW_COUNT_BYTES
+    jl @@row
+    
+    ret
+drawPlayingField endp
+
+inplaceCurrentFigure proc
+    mov ax, ds
     mov es, ax
 
-    mov si, [curFigure]
+    mov di, offset playingField ;start position
+    mov si, [curFigureOffset]
 
-    ;prepare position
-    xor ax, ax
     mov al, [yCoord]
-    mov dl, MAX_COLUMN_COUNT
-    mul dl
+    mov bl, PLAYING_FIELD_COLUMN_COUNT_BYTES
+    mul bl
+    add di, ax
 
-    xor dx, dx
-    mov dl, [xCoord]
-    add ax, dx
-    inc ax
+    xor ax, ax
+    mov al, [xCoord]
+    add di, ax
 
-    ;each pipxel is 2 bytes [attr, symbol]
-    shl ax, 1 
-    
-    mov di, ax
-
-    mov bx, 4 ;figure rows [1, 4]
+    mov bl, 0
     @@row:
-        xor cx, cx
-        mov cl, 04h
-        @@col:
-            xor ax, ax
-            lodsb ; ds[si] -> al
-            cmp al, 0
-            je @@skip
+    add di, 2
 
-            mov bh, [curFigureMaxX]
-            cmp bh, cl
-            jl @@updateMaxX
+    mov cx, 4
+    @@col:
+    lodsb
+    cmp al, 0
+    je @@skip
 
-            @@maxXUpdated:
-            mov bh, [curFigureMaxY]
-            cmp bh, bl
-            jl @@updateMaxY
+    call pickColor
+    stosw
+    stosw
+    jmp @@nextTick
 
-            @@maxYUpdated:
-            call pickColor
-            @@print:
-                stosw ; ax -> es[di]
-                jmp @@loop
-            @@skip:
-                add di, 2
-            @@loop:
-        loop @@col
+    @@skip:
+        add di, 4
 
-        xor ax, ax
-        mov ax, di
-        sub ax, 8
-        add ax, MAX_COLUMN_COUNT * 2
+    @@nextTick:
+    loop @@col
 
-        mov di, ax
-    dec bl
-    cmp bl, 0
-    ja @@row
+    sub di, 16 + 2 ;figure + border
+    add di, PLAYING_FIELD_COLUMN_COUNT_BYTES
+
+    inc bl
+    cmp bl, 4
+    jl @@row
 ret
-drawFigure endp
+inplaceCurrentFigure endp
 
-exit proc
-    mov ah, 4ch
-    int 21h
-    ret
-exit endp
+removeCurrFigure proc
+    mov ax, ds
+    mov es, ax
+
+    mov di, offset playingField ;start position
+    mov si, [curFigureOffset]
+
+    mov al, [yCoord]
+    mov bl, PLAYING_FIELD_COLUMN_COUNT_BYTES
+    mul bl
+    add di, ax
+
+    xor ax, ax
+    mov al, [xCoord]
+    add di, ax
+
+    mov bl, 0
+    @@row:
+    add di, 2
+
+    mov cx, 4
+    @@col:
+    lodsb
+    cmp al, 0
+    je @@skip
+
+    mov ax, FIELD_SYMBOL
+    stosw
+    stosw
+    jmp @@nextTick
+
+    @@skip:
+        add di, 4
+
+    @@nextTick:
+    loop @@col
+
+    sub di, 16 + 2 ;figure + border
+    add di, PLAYING_FIELD_COLUMN_COUNT_BYTES
+
+    inc bl
+    cmp bl, 4
+    jl @@row
+ret
+removeCurrFigure endp
 
 sleep proc
     push cx
@@ -264,13 +289,13 @@ jmp @@startHandleKey
 
 @@handleRight:
     mov al, [xCoord]
-    mov ah, PLAYING_FIELD_SIZE + 1
-    sub ah, [curFigureMaxX]
+    mov ah, PLAYING_FIELD_COLUMN_COUNT_BYTES + 1
+    sub ah, [curFigureWudth]
 
     cmp al, ah
     jae @@clearBuffer
 
-    inc al
+    add al, 4
     mov [xCoord], al
     jmp @@clearBuffer
 
@@ -279,7 +304,7 @@ jmp @@startHandleKey
     cmp al, 0
     je @@clearBuffer
 
-    dec al
+    sub al, 4
     mov [xCoord], al
     jmp @@clearBuffer
 
@@ -308,29 +333,31 @@ jmp @@startHandleKey
         ret
 handleKey endp
 
+exit proc
+    mov ah, 4ch
+    int 21h
+    ret
+exit endp
+
 main: 
     mov ax, @data
     mov ds, ax
 
-    mov cx, ROW_COUNT - 1
-    ;;init field array
-    ;;on finish cycle we will save figure position in memory
-    ;; afterwards we will redraw all figures on draw field
-    ;;need rewrite logic: init playing field and save on each figure move instead redrawing
+    call initPlayingField
+
+    mov cx, 12
     @@cycle:
-        push cx
-        call drawField
-        call drawFigure
+    push cx
+    call inplaceCurrentFigure
+    call drawPlayingField
+    call removeCurrFigure
+    call sleep
+    call handleKey
+    pop cx
 
-        call sleep
-        call handleKey
-
-        pop cx
-
-        mov al, [yCoord]
-        inc al
-
-        mov [yCoord], al
+    mov al, [yCoord]
+    inc al
+    mov [yCoord], al
     loop @@cycle
 
     @@exit: 
