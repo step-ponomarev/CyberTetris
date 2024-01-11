@@ -161,7 +161,7 @@ initPlayingField endp
 drawPlayingField proc
     mov bx, VIDEO_RAM
     mov es, bx
-    mov di, TERMINAL_COLUMN_BYTES
+    mov di, 0
 
     mov si, offset playingField ;start figure position on playing field
     mov bl, 0
