@@ -23,6 +23,7 @@
     ;keys
     RIGHT_KEY = 4dh
     LEFT_KEY = 4bh
+    ENTER_KEY = 1ch
 
     squareFigure        db 1, 1, 0, 0
                         db 1, 1, 0, 0
@@ -76,10 +77,10 @@
 
     playingField db PLAYING_FIELD_SIZE_BYTES dup(0)
     ; each figure has this attrs
-    curFigureOffset dw offset lFigureRotation2
+    curFigureOffset dw offset longRotated
 
-    curFigureWudth db 0
-    curFigureHeight db 0
+    curFigureRightCubeOffset dw 0
+    curFigureRightBottomCubeOffset dw 0
     curFigureRotationAmount db 0
     curFigureRotationId db 0
 
@@ -229,6 +230,7 @@ inplaceCurrentFigure proc
 ret
 inplaceCurrentFigure endp
 
+; TODO: Избавиться от дублирования
 removeCurrFigure proc
     mov ax, ds
     mov es, ax
@@ -289,12 +291,6 @@ jmp @@startHandleKey
 
 @@handleRight:
     mov al, [xCoord]
-    mov ah, PLAYING_FIELD_COLUMN_COUNT_BYTES + 1
-    sub ah, [curFigureWudth]
-
-    cmp al, ah
-    jae @@clearBuffer
-
     add al, 4
     mov [xCoord], al
     jmp @@clearBuffer
@@ -307,6 +303,9 @@ jmp @@startHandleKey
     sub al, 4
     mov [xCoord], al
     jmp @@clearBuffer
+
+@@handleEnter:
+    call exit
 
 @@clearBuffer:
     mov ah, 0h ; read from buffer
@@ -329,9 +328,59 @@ jmp @@startHandleKey
     cmp ah, LEFT_KEY
     je @@handleLeft
 
+    cmp ah, ENTER_KEY
+    je @@handleEnter
+
     @@ret:
         ret
 handleKey endp
+
+; TODO: Тут нужно проверять, что под текущей фигурой ничего нет. Если есть, то jmp prepareNewFigure
+checkFinished proc
+    mov di, offset playingField ;start position
+
+    mov al, [yCoord]
+    mov bl, PLAYING_FIELD_COLUMN_COUNT_BYTES
+    mul bl
+    add di, ax
+
+    xor ax, ax
+    mov al, [xCoord]
+    add di, ax
+    add di, 2 ;left
+
+    mov si, [curFigureOffset]
+    
+    mov cx, 4
+    @@row:
+
+    mov bx, 0
+    @@col:
+    mov al, [si + bx]
+    cmp al, 0
+    je @@nextCol
+
+    @@checkNextRow:
+    mov ax, @data:[di + PLAYING_FIELD_COLUMN_COUNT_BYTES]
+    cmp ax, FIELD_SYMBOL
+    jne prepareNewFigure
+
+    @@nextCol:
+    add di, 4
+
+    inc bx
+    cmp bx, 4
+    jl @@col
+
+    @@nextRow:
+    add si, 4 ;next figure row
+
+    sub di, 16 ;next figure row
+    add di, PLAYING_FIELD_COLUMN_COUNT_BYTES
+    loop @@row
+
+    ret
+checkFinished endp
 
 exit proc
     mov ah, 4ch
@@ -345,20 +394,22 @@ main:
 
     call initPlayingField
 
-    mov cx, 12
+    prepareNewFigure:
+    mov [xCoord], 0
+    mov [yCoord], 0
+
     @@cycle:
-    push cx
     call inplaceCurrentFigure
     call drawPlayingField
+    call checkFinished
     call removeCurrFigure
     call sleep
     call handleKey
-    pop cx
 
     mov al, [yCoord]
     inc al
     mov [yCoord], al
-    loop @@cycle
+    jmp @@cycle
 
     @@exit: 
         call exit
