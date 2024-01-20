@@ -35,24 +35,9 @@
                         db 2, 0, 0, 0
                         db 0, 0, 0, 0
 
-    longRotated         db 2, 2, 2, 0
-                        db 0, 0, 0, 0
-                        db 0, 0, 0, 0
-                        db 0, 0, 0, 0
-
     lFigure             db 4, 0, 0, 0
                         db 4, 0, 0, 0
                         db 4, 4, 0, 0
-                        db 0, 0, 0, 0
-
-    lFigureRotation1    db 4, 4, 4, 0
-                        db 0, 0, 4, 0
-                        db 0, 0, 0, 0
-                        db 0, 0, 0, 0
-
-    lFigureRotation2    db 0, 0, 4, 0
-                        db 4, 4, 4, 0
-                        db 0, 0, 0, 0
                         db 0, 0, 0, 0
 
     tFigure             db 0, 3, 0, 0
@@ -60,24 +45,8 @@
                         db 0, 0, 0, 0
                         db 0, 0, 0, 0
 
-    tFigureRotation1    db 3, 0, 0, 0
-                        db 3, 3, 0, 0
-                        db 3, 0, 0, 0
-                        db 0, 0, 0, 0
-
-    tFigureRotation2    db 3, 3, 3, 0
-                        db 0, 3, 0, 0
-                        db 0, 0, 0, 0
-                        db 0, 0, 0, 0
-
-    tFigureRotation3    db 0, 3, 0, 0
-                        db 3, 3, 0, 0
-                        db 0, 3, 0, 0
-                        db 0, 0, 0, 0
-
     playingField db PLAYING_FIELD_SIZE_BYTES dup(0)
-    ; each figure has this attrs
-    curFigureOffset dw offset longRotated
+    curFigureOffset dw offset squareFigure
 
     curFigureRightCubeOffset dw 0
     curFigureRightBottomCubeOffset dw 0
@@ -86,6 +55,8 @@
 
     xCoord db 0
     yCoord db 0
+
+    figureOffsetList dw offset squareFigure, offset longFigure, offset tFigure, offset lFigure
 .code
 
 pickColor proc ;is macross better?
@@ -93,7 +64,7 @@ pickColor proc ;is macross better?
     je @@pickSquareColor
 
     cmp al, 2
-    je @@pickLColor
+    je @@pickLongColor
 
     cmp al, 3
     je @@pickTColor
@@ -107,11 +78,10 @@ pickColor proc ;is macross better?
     @@pickLongColor:
         mov ax, PURPLE_SYMBOL
         jmp @@ret
-
     @@pickTColor:
         mov ax, GREEN_SYMBOL
         jmp @@ret
-        
+
     @@pickLColor:
         mov ax, BLUE_SYMBOL
         jmp @@ret
@@ -335,7 +305,6 @@ jmp @@startHandleKey
         ret
 handleKey endp
 
-; TODO: Тут нужно проверять, что под текущей фигурой ничего нет. Если есть, то jmp prepareNewFigure
 checkFinished proc
     mov di, offset playingField ;start position
 
@@ -363,7 +332,14 @@ checkFinished proc
     @@checkNextRow:
     mov ax, @data:[di + PLAYING_FIELD_COLUMN_COUNT_BYTES]
     cmp ax, FIELD_SYMBOL
-    jne prepareNewFigure
+    je @@nextCol
+
+    cmp cx, 0 ;last row and under not empty field
+    je prepareNewFigure
+
+    mov al, [si + bx + 4] ; check next figure row
+    cmp al, 0
+    je prepareNewFigure
 
     @@nextCol:
     add di, 4
@@ -388,6 +364,38 @@ exit proc
     ret
 exit endp
 
+random proc
+    mov ah, 00h
+    int 1ah  
+
+    mov ax, dx   
+    xor dx, dx  
+
+    mov cx, 4
+    div cx
+  
+    mov ax, dx
+
+    ret
+random endp
+
+pickRandomFigure proc
+    call random
+
+    mov dl, 2
+    mul dl
+    
+    mov bx, offset figureOffsetList
+    add bx, ax
+
+    mov dx, [curFigureOffset]
+
+    mov ax, @data:[bx]
+    mov [curFigureOffset], ax
+
+    ret
+pickRandomFigure endp
+
 main: 
     mov ax, @data
     mov ds, ax
@@ -397,6 +405,7 @@ main:
     prepareNewFigure:
     mov [xCoord], 0
     mov [yCoord], 0
+    call pickRandomFigure
 
     @@cycle:
     call inplaceCurrentFigure
