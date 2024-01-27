@@ -33,7 +33,7 @@
     longFigure          db 2, 0, 0, 0
                         db 2, 0, 0, 0
                         db 2, 0, 0, 0
-                        db 0, 0, 0, 0
+                        db 2, 0, 0, 0
 
     lFigure             db 4, 0, 0, 0
                         db 4, 0, 0, 0
@@ -46,7 +46,7 @@
                         db 0, 0, 0, 0
 
     playingField db PLAYING_FIELD_SIZE_BYTES dup(0)
-    curFigureOffset dw offset squareFigure
+    curFigureOffset dw offset longFigure
 
     curFigureRightCubeOffset dw 0
     curFigureRightBottomCubeOffset dw 0
@@ -334,7 +334,7 @@ checkFinished proc
     cmp ax, FIELD_SYMBOL
     je @@nextCol
 
-    cmp cx, 0 ;last row and under not empty field
+    cmp cx, 1 ;last row and under not empty field
     je prepareNewFigure
 
     mov al, [si + bx + 4] ; check next figure row
