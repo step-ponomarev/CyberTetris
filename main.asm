@@ -114,7 +114,7 @@
 
     playingField db PLAYING_FIELD_SIZE_BYTES dup(0)
     currFigureBaseOffset dw 0
-    curFigureOffset dw 0
+    currFigureOffset dw 0
     currFigureState db 0
     currFigureStateAmount db 0
 
@@ -232,7 +232,7 @@ inplaceCurrentFigure proc
     mov es, ax
 
     mov di, offset playingField ;start position
-    mov si, [curFigureOffset]
+    mov si, [currFigureOffset]
 
     mov al, [yCoord]
     mov bl, PLAYING_FIELD_COLUMN_COUNT_BYTES
@@ -279,7 +279,7 @@ removeCurrFigure proc
     mov es, ax
 
     mov di, offset playingField ;start position
-    mov si, [curFigureOffset]
+    mov si, [currFigureOffset]
 
     mov al, [yCoord]
     mov bl, PLAYING_FIELD_COLUMN_COUNT_BYTES
@@ -359,7 +359,7 @@ jmp @@startHandleKey
     mov bx, [currFigureBaseOffset]
     add bx, ax
 
-    mov [curFigureOffset], bx
+    mov [currFigureOffset], bx
     
     jmp @@clearBuffer
 
@@ -421,7 +421,7 @@ checkFinished proc
     add di, ax
     add di, 2 ;left
 
-    mov si, [curFigureOffset]
+    mov si, [currFigureOffset]
     
     mov cx, 4
     @@row:
@@ -496,10 +496,10 @@ pickRandomFigure proc
     mov bx, offset figureOffsetList
     add bx, ax
 
-    mov dx, [curFigureOffset]
+    mov dx, [currFigureOffset]
  
     mov ax, [bx]
-    mov [curFigureOffset], ax
+    mov [currFigureOffset], ax
     mov [currFigureBaseOffset], ax
 
     ret
