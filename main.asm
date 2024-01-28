@@ -10,7 +10,7 @@
     PURPLE_SYMBOL = 55DBh
     BLUE_SYMBOL = 33DBh
     GREEN_SYMBOL = 22DBh
-    JJJ_SYMBOL = 66DBh
+    YELLOW_SYMBOL = 66DBh
 
     ;playing filed sizes
     TERMINAL_COLUMN_BYTES = 160
@@ -139,7 +139,7 @@ pickColor proc ;is macross better?
     je @@pickLColor
 
     cmp al, 5
-    je @@pickLColor
+    je @@pickZColor
 
     @@pickSquareColor:
         mov ax, ORANGE_SYMBOL
@@ -156,7 +156,7 @@ pickColor proc ;is macross better?
         jmp @@ret
 
     @@pickZColor:
-        mov ax, JJJ_SYMBOL
+        mov ax, YELLOW_SYMBOL
         jmp @@ret
 
 @@ret:
