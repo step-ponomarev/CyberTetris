@@ -10,6 +10,7 @@
     PURPLE_SYMBOL = 55DBh
     BLUE_SYMBOL = 33DBh
     GREEN_SYMBOL = 22DBh
+    JJJ_SYMBOL = 66DBh
 
     ;playing filed sizes
     TERMINAL_COLUMN_BYTES = 160
@@ -24,39 +25,104 @@
     RIGHT_KEY = 4dh
     LEFT_KEY = 4bh
     ENTER_KEY = 1ch
+    SPACE_KEY = 39h
+    FIGURE_AMOUNT = 5
 
+    FIGURE_SIZE_BYTES = 16
+    
+    ; square 1
     squareFigure        db 1, 1, 0, 0
                         db 1, 1, 0, 0
                         db 0, 0, 0, 0
                         db 0, 0, 0, 0
 
+    ; long 2
     longFigure          db 2, 0, 0, 0
                         db 2, 0, 0, 0
                         db 2, 0, 0, 0
                         db 2, 0, 0, 0
 
+    longFigure1         db 2, 2, 2, 2
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+
+    longFigure2         db 0, 0, 0, 2
+                        db 0, 0, 0, 2
+                        db 0, 0, 0, 2
+                        db 0, 0, 0, 2
+
+    longFigure3         db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+                        db 2, 2, 2, 2                    
+
+    ; l figure 4
     lFigure             db 4, 0, 0, 0
                         db 4, 0, 0, 0
                         db 4, 4, 0, 0
                         db 0, 0, 0, 0
 
+    lFigure1            db 4, 4, 4, 0
+                        db 4, 0, 0, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+
+    lFigure2            db 4, 4, 0, 0
+                        db 0, 4, 0, 0
+                        db 0, 4, 0, 0
+                        db 0, 0, 0, 0
+
+    lFigure3            db 0, 0, 4, 0
+                        db 4, 4, 4, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+
+    ; t figure 4
     tFigure             db 0, 3, 0, 0
                         db 3, 3, 3, 0
                         db 0, 0, 0, 0
                         db 0, 0, 0, 0
 
-    playingField db PLAYING_FIELD_SIZE_BYTES dup(0)
-    curFigureOffset dw offset longFigure
+    tFigure1            db 3, 0, 0, 0
+                        db 3, 3, 0, 0
+                        db 3, 0, 0, 0
+                        db 0, 0, 0, 0
+    
+    tFigure2            db 3, 3, 3, 0
+                        db 0, 3, 0, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
 
-    curFigureRightCubeOffset dw 0
-    curFigureRightBottomCubeOffset dw 0
-    curFigureRotationAmount db 0
-    curFigureRotationId db 0
+    tFigure3            db 0, 3, 0, 0
+                        db 3, 3, 0, 0
+                        db 0, 3, 0, 0
+                        db 0, 0, 0, 0
+
+    ; Z figure
+    zFigure             db 5, 0, 0, 0
+                        db 5, 5, 0, 0
+                        db 0, 5, 0, 0
+                        db 0, 0, 0, 0
+
+    ; Z figure 2
+    zFigure1            db 0, 5, 5, 0
+                        db 5, 5, 0, 0
+                        db 0, 0, 0, 0
+                        db 0, 0, 0, 0
+
+
+    playingField db PLAYING_FIELD_SIZE_BYTES dup(0)
+    currFigureBaseOffset dw 0
+    curFigureOffset dw 0
+    currFigureState db 0
+    currFigureStateAmount db 0
 
     xCoord db 0
     yCoord db 0
 
-    figureOffsetList dw offset squareFigure, offset longFigure, offset tFigure, offset lFigure
+    figureOffsetList dw offset squareFigure, offset longFigure, offset tFigure, offset lFigure, offset zFigure
+    figureStatesAmount db 0, 3, 3, 3, 1
 .code
 
 pickColor proc ;is macross better?
@@ -72,6 +138,9 @@ pickColor proc ;is macross better?
     cmp al, 4
     je @@pickLColor
 
+    cmp al, 5
+    je @@pickLColor
+
     @@pickSquareColor:
         mov ax, ORANGE_SYMBOL
         jmp @@ret
@@ -84,6 +153,10 @@ pickColor proc ;is macross better?
 
     @@pickLColor:
         mov ax, BLUE_SYMBOL
+        jmp @@ret
+
+    @@pickZColor:
+        mov ax, JJJ_SYMBOL
         jmp @@ret
 
 @@ret:
@@ -265,6 +338,31 @@ jmp @@startHandleKey
     mov [xCoord], al
     jmp @@clearBuffer
 
+@@handleSpace:
+    mov al, [currFigureState]
+    mov ah, [currFigureStateAmount]
+
+    cmp al, ah
+    jne @@nextState
+
+    mov al, 0
+    jmp @@changeCurrFigure
+
+    @@nextState:
+    inc al
+
+    @@changeCurrFigure:
+    mov [currFigureState], al
+    mov ah, FIGURE_SIZE_BYTES
+    mul ah
+
+    mov bx, [currFigureBaseOffset]
+    add bx, ax
+
+    mov [curFigureOffset], bx
+    
+    jmp @@clearBuffer
+
 @@handleLeft:
     mov al, [xCoord]
     cmp al, 0
@@ -300,6 +398,11 @@ jmp @@startHandleKey
 
     cmp ah, ENTER_KEY
     je @@handleEnter
+
+    cmp ah, SPACE_KEY
+    je @@handleSpace
+
+    jmp @@clearBuffer
 
     @@ret:
         ret
@@ -371,7 +474,7 @@ random proc
     mov ax, dx   
     xor dx, dx  
 
-    mov cx, 4
+    mov cx, FIGURE_AMOUNT
     div cx
   
     mov ax, dx
@@ -382,6 +485,11 @@ random endp
 pickRandomFigure proc
     call random
 
+    mov bx, offset figureStatesAmount
+    mov si, ax
+    mov bl, [bx + si]
+    mov [currFigureStateAmount], bl
+
     mov dl, 2
     mul dl
     
@@ -389,9 +497,10 @@ pickRandomFigure proc
     add bx, ax
 
     mov dx, [curFigureOffset]
-
-    mov ax, @data:[bx]
+ 
+    mov ax, [bx]
     mov [curFigureOffset], ax
+    mov [currFigureBaseOffset], ax
 
     ret
 pickRandomFigure endp
