@@ -29,6 +29,9 @@
     FIGURE_AMOUNT = 5
 
     FIGURE_SIZE_BYTES = 16
+
+
+    NEW_FIGURE_RETURN_CODE = 228h
     
     ; square 1
     squareFigure        db 1, 1, 0, 0
@@ -125,9 +128,8 @@
     figureStatesAmount db 0, 3, 3, 3, 1
 
     ;interrupts
+    oldTimerTickSegment dw 0
     oldTimerTickHandler dw 0
-
-    timerCount dw 0
 .code
 
 pickColor proc ;is macross better?
@@ -326,13 +328,13 @@ ret
 removeCurrFigure endp
 
 prepareTimerHandler proc
-    mov ax, ds
-    mov es, ax
-    mov bx, offset oldTimerTickHandler
-
-    mov ah, 35h ;pointer to current handler ->es[bx]
+    mov ah, 35h ;pointer to current handler -> es[bx]
     mov al, 1ch ;https://stanislavs.org/helppc/int_1c.html
     int 21h
+    
+    mov ax, es
+    mov [oldTimerTickSegment], ax
+    mov [oldTimerTickHandler], bx
 
     push ds
     mov ax, cs
@@ -349,11 +351,24 @@ prepareTimerHandler proc
 prepareTimerHandler endp
 
 handleTick proc
+    jmp @@handleTickStart
+
+    @@prepareNewFigure:
+    call prepareNewFigure
+    jmp @@ret
+
+    @@handleTickStart:
     call inplaceCurrentFigure
     call drawPlayingField
+
+    call checkFinished
+    cmp dx, NEW_FIGURE_RETURN_CODE
+    je @@prepareNewFigure
+
     call removeCurrFigure
     call handleKey
 
+    @@ret:
     iret
 handleTick endp
 
@@ -445,7 +460,15 @@ jmp @@startHandleKey
         ret
 handleKey endp
 
+; ret dx; if dx === NEW_FIGURE_RETURN_CODE -> new figure
 checkFinished proc
+    jmp @@start
+
+    @@prepareNewFigureLabel:
+    mov dx, NEW_FIGURE_RETURN_CODE
+    jmp @@ret
+
+    @@start:
     mov di, offset playingField ;start position
 
     mov al, [yCoord]
@@ -475,11 +498,11 @@ checkFinished proc
     je @@nextCol
 
     cmp cx, 1 ;last row and under not empty field
-    je prepareNewFigure
+    je @@prepareNewFigureLabel
 
     mov al, [si + bx + 4] ; check next figure row
     cmp al, 0
-    je prepareNewFigure
+    je @@prepareNewFigureLabel
 
     @@nextCol:
     add di, 4
@@ -495,12 +518,24 @@ checkFinished proc
     add di, PLAYING_FIELD_COLUMN_COUNT_BYTES
     loop @@row
 
+    @@ret:
     ret
 checkFinished endp
 
 exit proc
+    push ds
+    mov ax, [oldTimerTickSegment]
+    mov ds, ax
+    
+    mov dx, [oldTimerTickHandler]
+    mov ah, 25h 
+    mov al, 1ch
+    int 21h
+
     mov ah, 4ch
     int 21h
+
+    pop ds
     ret
 exit endp
 
@@ -542,26 +577,29 @@ pickRandomFigure proc
     ret
 pickRandomFigure endp
 
+prepareNewFigure proc
+    mov [xCoord], 0
+    mov [yCoord], 0
+    call pickRandomFigure
+
+    ret
+prepareNewFigure endp
+
 main: 
     mov ax, @data
     mov ds, ax
 
     call initPlayingField
+    call prepareNewFigure
     call prepareTimerHandler
 
-    prepareNewFigure:
-    mov [xCoord], 0
-    mov [yCoord], 0
-    call pickRandomFigure
-
-    @@cycle:
-        call checkFinished
+    @@cycle: 
         call sleep
+
         mov al, [yCoord]
         inc al
         mov [yCoord], al
     jmp @@cycle
 
-    @@exit: 
-        call exit
+    call exit
 end main
