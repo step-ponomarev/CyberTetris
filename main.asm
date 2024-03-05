@@ -123,6 +123,11 @@
 
     figureOffsetList dw offset squareFigure, offset longFigure, offset tFigure, offset lFigure, offset zFigure
     figureStatesAmount db 0, 3, 3, 3, 1
+
+    ;interrupts
+    oldTimerTickHandler dw 0
+
+    timerCount dw 0
 .code
 
 pickColor proc ;is macross better?
@@ -249,7 +254,7 @@ inplaceCurrentFigure proc
 
     mov cx, 4
     @@col:
-    lodsb
+    lodsb ;ds[si] -> al
     cmp al, 0
     je @@skip
 
@@ -319,6 +324,38 @@ removeCurrFigure proc
     jl @@row
 ret
 removeCurrFigure endp
+
+prepareTimerHandler proc
+    mov ax, ds
+    mov es, ax
+    mov bx, offset oldTimerTickHandler
+
+    mov ah, 35h ;pointer to current handler ->es[bx]
+    mov al, 1ch ;https://stanislavs.org/helppc/int_1c.html
+    int 21h
+
+    push ds
+    mov ax, cs
+    mov ds, ax
+    mov dx, offset handleTick
+
+    mov ah, 25h 
+    mov al, 1ch
+    int 21h
+
+    pop ds
+
+    ret
+prepareTimerHandler endp
+
+handleTick proc
+    call inplaceCurrentFigure
+    call drawPlayingField
+    call removeCurrFigure
+    call handleKey
+
+    iret
+handleTick endp
 
 sleep proc
     push cx
@@ -510,6 +547,7 @@ main:
     mov ds, ax
 
     call initPlayingField
+    call prepareTimerHandler
 
     prepareNewFigure:
     mov [xCoord], 0
@@ -517,16 +555,11 @@ main:
     call pickRandomFigure
 
     @@cycle:
-    call inplaceCurrentFigure
-    call drawPlayingField
-    call checkFinished
-    call removeCurrFigure
-    call sleep
-    call handleKey
-
-    mov al, [yCoord]
-    inc al
-    mov [yCoord], al
+        call checkFinished
+        call sleep
+        mov al, [yCoord]
+        inc al
+        mov [yCoord], al
     jmp @@cycle
 
     @@exit: 
