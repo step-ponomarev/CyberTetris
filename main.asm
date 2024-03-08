@@ -24,11 +24,14 @@
     ;keys
     RIGHT_KEY = 4dh
     LEFT_KEY = 4bh
+    DOWN_KEY = 50h
     ENTER_KEY = 1ch
     SPACE_KEY = 39h
     FIGURE_AMOUNT = 5
 
     FIGURE_SIZE_BYTES = 16
+
+    TICK_PER_SECOND_AMOUNT = 18
 
 
     NEW_FIGURE_RETURN_CODE = 228h
@@ -48,17 +51,7 @@
     longFigure1         db 2, 2, 2, 2
                         db 0, 0, 0, 0
                         db 0, 0, 0, 0
-                        db 0, 0, 0, 0
-
-    longFigure2         db 0, 0, 0, 2
-                        db 0, 0, 0, 2
-                        db 0, 0, 0, 2
-                        db 0, 0, 0, 2
-
-    longFigure3         db 0, 0, 0, 0
-                        db 0, 0, 0, 0
-                        db 0, 0, 0, 0
-                        db 2, 2, 2, 2                    
+                        db 0, 0, 0, 0                  
 
     ; l figure 4
     lFigure             db 4, 0, 0, 0
@@ -121,11 +114,13 @@
     currFigureState db 0
     currFigureStateAmount db 0
 
+    tickCount db 0
+
     xCoord db 0
     yCoord db 0
 
     figureOffsetList dw offset squareFigure, offset longFigure, offset tFigure, offset lFigure, offset zFigure
-    figureStatesAmount db 0, 3, 3, 3, 1
+    figureStatesAmount db 0, 1, 3, 3, 1
 
     ;interrupts
     oldTimerTickSegment dw 0
@@ -351,11 +346,15 @@ prepareTimerHandler proc
 prepareTimerHandler endp
 
 handleTick proc
+    mov al, [tickCount]
+    inc al
+    mov [tickCount], al
+    
     jmp @@handleTickStart
 
     @@prepareNewFigure:
     call prepareNewFigure
-    jmp @@ret
+    jmp @@afterPrepareNewFigure
 
     @@handleTickStart:
     call inplaceCurrentFigure
@@ -365,8 +364,16 @@ handleTick proc
     cmp dx, NEW_FIGURE_RETURN_CODE
     je @@prepareNewFigure
 
+    @@afterPrepareNewFigure:
     call removeCurrFigure
     call handleKey
+
+    mov al, [tickCount]
+    cmp al, TICK_PER_SECOND_AMOUNT
+    jl @@ret
+
+    call incY
+    mov [tickCount], 0
 
     @@ret:
     iret
@@ -394,6 +401,9 @@ jmp @@startHandleKey
     mov al, [currFigureState]
     mov ah, [currFigureStateAmount]
 
+    cmp ah, 0
+    je @@clearBuffer
+
     cmp al, ah
     jne @@nextState
 
@@ -406,7 +416,7 @@ jmp @@startHandleKey
     @@changeCurrFigure:
     mov [currFigureState], al
     mov ah, FIGURE_SIZE_BYTES
-    mul ah
+    mul ah ;ax = mul arg * al
 
     mov bx, [currFigureBaseOffset]
     add bx, ax
@@ -424,8 +434,14 @@ jmp @@startHandleKey
     mov [xCoord], al
     jmp @@clearBuffer
 
+@@handleDown:
+    call incY
+    jmp @@clearBuffer
+
+
 @@handleEnter:
     call exit
+    jmp @@clearBuffer
 
 @@clearBuffer:
     mov ah, 0h ; read from buffer
@@ -447,6 +463,9 @@ jmp @@startHandleKey
 
     cmp ah, LEFT_KEY
     je @@handleLeft
+
+    cmp ah, DOWN_KEY
+    je @@handleDown
 
     cmp ah, ENTER_KEY
     je @@handleEnter
@@ -540,6 +559,13 @@ exit proc
 exit endp
 
 random proc
+    jmp @@start
+
+    @@correctRandValue:
+    mov ax, 4
+    jmp @@end
+
+    @@start:
     mov ah, 00h
     int 1ah  
 
@@ -550,7 +576,10 @@ random proc
     div cx
   
     mov ax, dx
+    cmp ax, FIGURE_AMOUNT - 1
+    jg @@correctRandValue
 
+    @@end:
     ret
 random endp
 
@@ -585,6 +614,14 @@ prepareNewFigure proc
     ret
 prepareNewFigure endp
 
+incY proc
+    mov al, [yCoord]
+    inc al
+    mov [yCoord], al
+
+    ret
+incY endp
+
 main: 
     mov ax, @data
     mov ds, ax
@@ -592,14 +629,4 @@ main:
     call initPlayingField
     call prepareNewFigure
     call prepareTimerHandler
-
-    @@cycle: 
-        call sleep
-
-        mov al, [yCoord]
-        inc al
-        mov [yCoord], al
-    jmp @@cycle
-
-    call exit
 end main
