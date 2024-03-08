@@ -618,6 +618,7 @@ prepareNewFigure proc
     ret
 prepareNewFigure endp
 
+;TODO: костыльная и неоптимальная процедура
 calculateFugureLen proc
     mov bx, [currFigureOffset]
 
