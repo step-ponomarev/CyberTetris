@@ -41,7 +41,6 @@
                         db 1, 1, 0, 0
                         db 0, 0, 0, 0
                         db 0, 0, 0, 0
-
     ; long 2
     longFigure          db 2, 0, 0, 0
                         db 2, 0, 0, 0
@@ -73,7 +72,6 @@
                         db 4, 4, 4, 0
                         db 0, 0, 0, 0
                         db 0, 0, 0, 0
-
     ; t figure 4
     tFigure             db 0, 3, 0, 0
                         db 3, 3, 3, 0
@@ -118,6 +116,7 @@
 
     xCoord db 0
     yCoord db 0
+    figureLen db 0
 
     figureOffsetList dw offset squareFigure, offset longFigure, offset tFigure, offset lFigure, offset zFigure
     figureStatesAmount db 0, 1, 3, 3, 1
@@ -391,12 +390,6 @@ sleep endp
 handleKey proc
 jmp @@startHandleKey
 
-@@handleRight:
-    mov al, [xCoord]
-    add al, 4
-    mov [xCoord], al
-    jmp @@clearBuffer
-
 @@handleSpace:
     mov al, [currFigureState]
     mov ah, [currFigureStateAmount]
@@ -422,6 +415,7 @@ jmp @@startHandleKey
     add bx, ax
 
     mov [currFigureOffset], bx
+    call calculateFugureLen
     
     jmp @@clearBuffer
 
@@ -431,6 +425,14 @@ jmp @@startHandleKey
     je @@clearBuffer
 
     sub al, 4
+    mov [xCoord], al
+    jmp @@clearBuffer
+
+@@handleRight:
+    ;тут нужно сделать сложную логику вычисления положения фигуры с проверкой есть ли что-то справа от нее
+    ; использовать figureLen
+    mov al, [xCoord]
+    add al, 4
     mov [xCoord], al
     jmp @@clearBuffer
 
@@ -603,6 +605,8 @@ pickRandomFigure proc
     mov [currFigureOffset], ax
     mov [currFigureBaseOffset], ax
 
+    call calculateFugureLen
+
     ret
 pickRandomFigure endp
 
@@ -613,6 +617,35 @@ prepareNewFigure proc
 
     ret
 prepareNewFigure endp
+
+calculateFugureLen proc
+    mov bx, [currFigureOffset]
+
+    mov cx, FIGURE_SIZE_BYTES
+    @@loop:
+    mov ax, cx
+    mov dl, 4 ; [0, 3]
+    div dl ; al -> row, ah -> column
+
+    mov si, cx
+    mov bl, [bx + si] ;currSymbol
+
+    cmp bl, 0
+    je @@skip
+
+    mov al, [figureLen]
+    cmp ah, al
+    jle @@skip
+
+    mov [figureLen], ah
+
+    @@skip:
+    loop @@loop
+
+    @@ret:
+        mov [figureLen], dh
+    ret
+calculateFugureLen endp
 
 incY proc
     mov al, [yCoord]
